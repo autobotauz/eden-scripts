@@ -1,9 +1,4 @@
-import requests
-import csv
-import json
-import urllib.parse
-import argparse
-import re
+import requests, csv, json, urllib.parse, argparse, re
 
 # Set up argument parser
 parser = argparse.ArgumentParser(description='Fetch item data and save to CSV')
@@ -16,24 +11,27 @@ parser.add_argument('--search_url', default='', help='Specific Eden search respo
 parser.add_argument('--append', action='store_true', help='Append to CSV - if not used a new csv will be created')
 args = parser.parse_args()
 
-# Map realm to corresponding ID
+# Map realm string to corresponding realm id
 realm_map = {
     'albion': '1', 'alb': '1',
     'midgard': '2', 'mid': '2',
     'hibernia': '3', 'hib': '3'
 }
-realm_id = realm_map.get(args.realm.lower(), '2')  # Default to midgard (2) if invalid
+realm_id = realm_map.get(args.realm.lower(), '2')  # Default to midgard (2) if invalid - because I'm playing mid right meow
 
-# URL-encode the item name
+# URL-encode the item name because we care
 item_encoded = urllib.parse.quote(args.item)
 
-# Base URL
+# Base eden market seach URL
 base_url = f"https://eden-daoc.net/itm/market_search.php?r={realm_id}&c=22"
+# add item encoded string
 if args.item:
     base_url += f"&s={item_encoded}"
 
+# override base_url with user search_url if provided 
 if args.search_url:
     base_url = args.search_url
+
 # Headers from cURL
 headers = {
     "accept": "application/json, text/javascript, */*; q=0.01",
@@ -58,8 +56,7 @@ cookies = {
     "eden_daoc_sid": "" # add your eden_daoc_sid value here
 }
 
-
-
+# Convert QoL price format to copper
 def price_to_copper(price_str):
     pattern = re.compile(r'(?:(\d+)p)?(?:(\d+)g)?(?:(\d+)s)?(?:(\d+)c)?', re.IGNORECASE)
     match = pattern.fullmatch(price_str.strip())
@@ -78,27 +75,29 @@ def price_to_copper(price_str):
         copper
     )
     return total_copper
-# Define CSV headers
+
+# CSV headers that I think are to be true to the response
 csvheaders = [
     'houseNumber', 'marketId', 'itemPrice', 'quality', 'con', 'durability',
     'unknown1', 'itemName', 'unknown2', 'model', 'unknown4',
     'utility', 'unknown5', 'unknown6', 'unknown7', 'unknown8', 'unknown9', 'unknown10', 'url'
 ]
 
-# Initialize CSV file
+# Initialize CSV file - append or writer based on append flag
 csvfile = open('items.csv', 'a' if args.append else 'w', newline='', encoding='utf-8')
 writer = csv.writer(csvfile)
+# Don't write rows again if we're appending
 if not args.append:
     writer.writerow(csvheaders)  # Write headers
 
-# Initialize page counter
+# Initialize page counter because I couldn't find a pagination value in the response
 page = 0
 while True:
-    # Construct URL with page number
+    # Update page number
     url = f"{base_url}&p={page}"
     print(f"Fetching page {page}: {url}")
 
-    # Send GET request
+    # Send GET request to get our items
     response = requests.get(url, headers=headers, cookies=cookies)
 
     # Check if request was successful
@@ -110,10 +109,10 @@ while True:
             print(f"Failed to parse JSON on page {page}. Status code: {response.status_code}")
             break
 
-        # Extract the "l" key
+        # Extract the "l" key - list of items
         items = data.get('l', [])
 
-        # Break if no items found
+        # Break if no items found i.e at last page
         if len(items) == 0:
             print(f"No more items found on page {page}. Stopping.")
             break
@@ -126,13 +125,18 @@ while True:
             if len(item_data) < 12:
                 print(f"Skipping malformed item on page {page}: {item}")
                 continue
+            # Append the market url for the item using marketID
             item_data.append(f'https://eden-daoc.net/items?m=market&mid={item_data[1]}')
             try:
+                # Get copper from user price
                 new_price = price_to_copper(args.price) if args.price else float('inf')
+                # Item values to be used
                 item_price = int(item_data[2])
                 item_utility = float(item_data[11])
+                # Found our item, write to file
                 if item_utility <= float(args.max_utility) and item_utility >= float(args.min_utility) and item_price <= new_price:
                     writer.writerow(item_data)
+                # I believe items are provided desc order on utility value. Break iteration if we find utility less than what we want
                 if item_utility < float(args.min_utility):
                     break
             except (ValueError, IndexError) as e:
