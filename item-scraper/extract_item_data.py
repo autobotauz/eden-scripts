@@ -92,6 +92,8 @@ if not args.append:
 
 # Initialize page counter because I couldn't find a pagination value in the response
 page = 0
+# If we find a low utility, lets break out of our loop and not hit Eden APIs anymore - we're nice like that
+lowUtilFound = False
 while True:
     # Update page number
     url = f"{base_url}&p={page}"
@@ -137,12 +139,14 @@ while True:
                 if item_utility <= float(args.max_utility) and item_utility >= float(args.min_utility) and item_price <= new_price:
                     writer.writerow(item_data)
                 # I believe items are provided desc order on utility value. Break iteration if we find utility less than what we want
-                if item_utility < float(args.min_utility):
-                    break
+                if float(item_utility) < float(args.min_utility):
+                    lowUtilFound = True
             except (ValueError, IndexError) as e:
                 print(f"Error processing item on page {page}: {item}. Error: {e}")
                 continue
-
+        if lowUtilFound:
+            print("Found a low utility item, stopping the search.")
+            break
         # Increment page
         page += 1
     else:
