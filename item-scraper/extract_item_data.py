@@ -1,4 +1,4 @@
-import requests, csv, json, urllib.parse, argparse, re
+import requests, csv, json, urllib.parse, argparse, re, sys
 
 # Set up argument parser
 parser = argparse.ArgumentParser(description='Fetch item data and save to CSV')
@@ -75,6 +75,11 @@ def price_to_copper(price_str):
         copper
     )
     return total_copper
+
+for cKey, cVal in cookies.items():
+    if not cVal:
+        print(f"Missing cookie value for {cKey} - please add it.")
+        sys.exit(1)
 
 # CSV headers that I think are to be true to the response
 csvheaders = [
